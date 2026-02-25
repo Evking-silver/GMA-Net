@@ -1,0 +1,45 @@
+nc: 80 # number of classes
+scales: # model compound scaling constants, i.e. 'model=yolov13n.yaml' will call yolov13.yaml with scale 'n'
+  # [depth, width, max_channels]
+  n: [0.50, 0.25, 1024]   # Nano
+  s: [0.50, 0.50, 1024]   # Small
+  l: [1.00, 1.00, 512]    # Large
+  x: [1.00, 1.50, 512]    # Extra Large
+
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, efficientnet_v2, []]  # 4
+
+head:
+  - [2, 1, Conv, [512, 1, 1]]  # 5
+  - [3, 1, Conv, [512, 1, 1]]  # 6
+  - [4, 1, Conv, [1024, 1, 1]]  # 7
+  - [[5, 6, 7], 2, HyperACE, [512, 8, True, True, 0.5, 1, "both"]]
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [ 8, 1, DownsampleConv, []]
+  - [[6, 8], 1, FullPAD_Tunnel, []]  #11     
+  - [[5, 9], 1, FullPAD_Tunnel, []]  #12    
+  - [[7, 10], 1, FullPAD_Tunnel, []] #13 
+  
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 11], 1, Concat, [1]] # cat backbone P4
+  - [-1, 2, DSC3k2, [512, True]] # 16
+  - [[-1, 8], 1, FullPAD_Tunnel, []]  #17
+
+  - [16, 1, nn.Upsample, [None, 2, "nearest"]]
+  - [[-1, 12], 1, Concat, [1]] # cat backbone P3
+  - [-1, 2, DSC3k2, [256, True]] # 20
+  - [9, 1, Conv, [256, 1, 1]]
+  - [[20, 21], 1, FullPAD_Tunnel, []]  #22
+  
+  - [-1, 1, Conv, [256, 3, 2]]
+  - [[-1, 17], 1, Concat, [1]] # cat head P4
+  - [-1, 2, DSC3k2, [512, True]] # 25
+  - [[-1, 8], 1, FullPAD_Tunnel, []]  
+
+  - [25, 1, Conv, [512, 3, 2]]
+  - [[-1, 13], 1, Concat, [1]] # cat head P5
+  - [-1, 2, DSC3k2, [1024, True]] # 29 (P5/32-large)
+  - [[-1, 10], 1, FullPAD_Tunnel, []]  
+  
+  - [[22, 26, 30], 1, Detect, [nc]] # Detect(P3, P4, P5)
